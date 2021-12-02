@@ -1,0 +1,7 @@
+shrt.vvproject.ru {
+    file_server
+    reverse_proxy 127.0.0.1:1080 {
+	header_up X-Real-IP {remote_host}
+	header_up X-Forwarded-For {remote_host}
+    }
+}
