@@ -73,7 +73,7 @@ class UrlController extends Controller
 
         $click = new Click();
         $click->url_id = $url->id;
-        $click->ip = request()->ip();
+        $click->ip = request()->header('X-Real-IP') ?? request()->ip();
 
         if ($url->is_commercial) {
             $banner = Banner::getRandom();
