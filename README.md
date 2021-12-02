@@ -1,5 +1,5 @@
 ## Укротитель ссылок
-#### [демка](https://shrt.vvproject.ru)
+#### <a href="https://shrt.vvproject.ru" target="shrt-demo">демка</a>
 
 ![](https://shrt.vvproject.ru/img.logo.png "")
 

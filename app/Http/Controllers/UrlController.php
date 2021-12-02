@@ -5,8 +5,9 @@ namespace App\Http\Controllers;
 use App\Models\Banner;
 use App\Models\Click;
 use App\Models\Url;
-use Carbon\Traits\Date;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
@@ -24,7 +25,6 @@ class UrlController extends Controller
                 $url->short_url = Str::random(5);
             } while (
                 Url::select('*')->where(['short_url' => $url->short_url])->exists()
-                || $url->short_url === 'stat'
             );
         }
         $bugs = request()->has('bugs') ? request('bugs') : [];
@@ -41,6 +41,7 @@ class UrlController extends Controller
         if (!preg_match('#^https?://#', $original_url)) {
             request()['original_url'] = "http://$original_url";
         }
+
         try {
             $this->validate($request, [
                 'original_url' => 'bail|required|url',
@@ -57,8 +58,8 @@ class UrlController extends Controller
         } catch (ValidationException $e) {
             return redirect()->route('create', array_merge($url->attributesToArray(), ['bugs' => $e->errors()]));
         }
-        $url = new Url(request()->all()); // Original url may be changed
-        $url->save();
+
+        $url = Url::create(request()->all()); // Original url may be changed
         return redirect()->route('stat', ['url' => $url->short_url]);
     }
 
@@ -68,15 +69,20 @@ class UrlController extends Controller
     public function click(Url $url)
     {
         if (empty($url)) abort(404);
-        if ($url->valid_until && $url->valid_until < Date::create()) abort(404);
+        if ($url->valid_until && $url->valid_until < Carbon::now()->toDateTimeString()) abort(404);
+
         $click = new Click();
         $click->url_id = $url->id;
         $click->ip = request()->ip();
+
         if ($url->is_commercial) {
-            $file_name = $this->getRandomBanner();
-            $click->banner_id = Banner::firstOrCreate(['file_name' => $file_name])->id;
+            $banner = Banner::getRandom();
+            $click->banner_id = $banner->id;
             $click->save();
-            return view('banner', ['banner_url' => request()->root() . "/banners/$file_name", "url" => $url->original_url]);
+            return view('banner', [
+                'banner_url' => request()->root() . "/banners/$banner->file_name",
+                "url" => $url->original_url
+            ]);
         } else {
             $click->save();
             return redirect($url->original_url);
@@ -86,17 +92,52 @@ class UrlController extends Controller
     /**
      * Display the specified link statistics.
      */
-    public function stat(Url $url)
+    public function stat(Url $url = null)
     {
-        return view('url-stat', ['url' => $url]);
+        list('ips_total' => $ips_total, 'clicks_total' => $clicks_total) = (array)DB::table('clicks')
+            ->select(DB::raw('count(distinct ip) as ips_total, count(*) as clicks_total'))
+            ->where('url_id', $url->id)
+            ->get()[0];
+
+        $clicks = Click::where('url_id', $url->id)->orderBy('created_at', 'desc')->paginate(10);
+
+        return response()->view('url-stat', [
+            'url' => $url,
+            'time_remains' => $url->getTimeRemains(),
+            'ips_total' => $ips_total,
+            'clicks_total' => $clicks_total,
+            'clicks' => $clicks,
+        ])->withHeaders([
+            'Cache-Control' => 'no-cache, no-store, must-revalidate',
+            'Pragma' => 'no-cache',
+            'Expires' => 0,
+        ]);
     }
 
-    public function getRandomBanner(): string
+    public function globalStat()
     {
-        $banners = glob(public_path() . '/banners/*.jpg');
-        $idx = rand(0, count($banners) - 1);
-        preg_match('#/([^/]+\.jpg)$#', $banners[$idx], $a);
-        return $a[1];
+        list(
+            'ips_total' => $ips_total, 'urls_total' => $urls_total,
+            'clicks_total' => $clicks_total, 'clicks_unique' => $clicks_unique,
+            ) = (array)DB::table('clicks')
+            ->select(DB::raw('
+                count(distinct url_id) as urls_total, count(distinct ip) as ips_total,
+                count(distinct url_id, ip) as clicks_unique, count(*) as clicks_total
+            '))
+            ->where('created_at', '>', Carbon::createFromDate('14 days ago')->toDateTimeString())
+            ->get()[0];
+
+        return view('global-stat', [
+            'urls_total' => $urls_total,
+            'ips_total' => $ips_total,
+            'clicks_total' => $clicks_total,
+            'clicks_unique' => $clicks_unique,
+        ]);
+    }
+
+    public function test()
+    {
+        return $_SERVER;
     }
 
 }

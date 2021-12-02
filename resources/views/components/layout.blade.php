@@ -421,7 +421,7 @@
 
                 <div class="ml-4 sm:text-right text-sm text-gray-500 sm:ml-0">
                     <br>
-                    <a href="https://github.com/epoxa/shrt" target="github">
+                    <a href="https://github.com/epoxa/shrt" target="shrt-github">
                         Исходный код
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor"
                              class="bi bi-arrow-up-right" viewBox="0 0 16 16"
